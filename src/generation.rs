@@ -1,14 +1,14 @@
 use bevy::prelude::*;
 
-#[derive(Resource)]
+#[derive(Resource, Debug)]
 pub struct TerrainGeneratorConfig {
-    cube_size: f32,
-    chunk_size: IVec3,
-    chunks: IVec3,
-    show_debug_points: bool,
+    pub cube_size: f32,
+    pub chunk_size: UVec3,
+    pub chunks: UVec3,
+    pub show_debug_points: bool,
 }
 
-#[derive(Event, Debug)]
+#[derive(Debug)]
 pub struct GenerateTerrainEvent;
 
 #[derive(Component)]
@@ -20,8 +20,8 @@ impl Default for TerrainGeneratorConfig {
     fn default() -> Self {
         Self {
             cube_size: 1f32,
-            chunk_size: IVec3 { x: 1, y: 1, z: 1 },
-            chunks: IVec3 { x: 1, y: 1, z: 1 },
+            chunk_size: UVec3::ONE,
+            chunks: UVec3::ONE,
             show_debug_points: false,
         }
     }

@@ -1,81 +1,85 @@
-use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
-use bevy::{app::AppExit, prelude::*, winit::WinitSettings};
-use easy_repl::{command, CommandStatus, Repl};
-use std::sync::mpsc::{channel, Receiver};
-use std::sync::Mutex;
+use bevy::{app::AppExit, prelude::*};
+use bevy_egui::{
+    egui::{self, Align2, DragValue, FontId, RichText},
+    EguiContexts, EguiPlugin,
+};
 use terrain_procgen::generation::*;
 
 fn main() {
-    let (gen_event_sender, gen_event_receiver) = channel::<GenerateTerrainEvent>();
-    let (exit_event_sender, exit_event_receiver) = channel::<AppExit>();
-
-    AsyncComputeTaskPool::init(TaskPool::new);
-    let taskpool = AsyncComputeTaskPool::get();
-    taskpool
-        .spawn(async move {
-            println!("hello from task");
-            let mut repl = Repl::builder()
-                .add(
-                    "send",
-                    command!("Send config to terrain generator",() => || {
-                        gen_event_sender.send(GenerateTerrainEvent).unwrap();
-                        Ok(CommandStatus::Done)
-                    }),
-                )
-                .build()
-                .expect("Failed to create REPL");
-            repl.run().expect("Critical REPL error");
-            println!("exited repl");
-            exit_event_sender.send(AppExit).unwrap();
-        })
-        .detach();
-
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(WinitSettings::desktop_app())
+        .add_plugin(EguiPlugin)
         .init_resource::<TerrainGeneratorConfig>()
+        .init_resource::<UIState>()
         .add_event::<GenerateTerrainEvent>()
         .add_event::<AppExit>()
-        .add_event_channel(gen_event_receiver)
-        .add_event_channel(exit_event_receiver)
-        .add_systems(Update, bevy::window::close_on_esc)
+        .add_system(bevy::window::close_on_esc)
+        .add_system(ui_system)
         .run();
 }
 
-// This introduces event channels, on one side of which is mpsc::Sender<T>, and on another
-// side is bevy's EventReader<T>, and it automatically bridges between the two.
-#[derive(Resource, Deref, DerefMut)]
-struct ChannelReceiver<T>(Mutex<Receiver<T>>);
-
-pub trait AppExtensions {
-    // Allows you to create bevy events using mpsc Sender
-    fn add_event_channel<T: Event>(&mut self, receiver: Receiver<T>) -> &mut Self;
+#[derive(Resource, Debug, Default)]
+struct UIState {
+    is_side_pannel_expanded: bool,
 }
 
-impl AppExtensions for App {
-    fn add_event_channel<T: Event>(&mut self, receiver: Receiver<T>) -> &mut Self {
-        assert!(
-            !self.world.contains_resource::<ChannelReceiver<T>>(),
-            "this event channel is already initialized",
-        );
-
-        self.add_event::<T>();
-        self.add_systems(
-            Update,
-            channel_to_event::<T>.after(Events::<T>::update_system),
-        );
-        self.insert_resource(ChannelReceiver(Mutex::new(receiver)));
-        self
-    }
-}
-
-fn channel_to_event<T: 'static + Send + Sync + Event>(
-    receiver: Res<ChannelReceiver<T>>,
-    mut writer: EventWriter<T>,
+fn ui_system(
+    mut contexts: EguiContexts,
+    mut gen_config: ResMut<TerrainGeneratorConfig>,
+    mut ui_state: ResMut<UIState>,
+    mut event: EventWriter<GenerateTerrainEvent>,
 ) {
-    // this should be the only system working with the receiver,
-    // thus we always expect to get this lock
-    let events = receiver.lock().expect("unable to acquire mutex lock");
+    if !ui_state.is_side_pannel_expanded {
+        egui::Area::new("open_side_panel")
+            .anchor(Align2::RIGHT_TOP, (0f32, 0f32))
+            .show(contexts.ctx_mut(), |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Unfold").clicked() {
+                        ui_state.is_side_pannel_expanded = true;
+                    }
+                })
+            });
+        return;
+    }
+    egui::SidePanel::right("Terrain Generator Settings")
+        .resizable(false)
+        .show_animated(contexts.ctx_mut(), ui_state.is_side_pannel_expanded, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Terrain Generator Settings");
+                if ui.button("Fold").clicked() {
+                    ui_state.is_side_pannel_expanded = false;
+                }
+            });
+            ui.vertical_centered_justified(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Cube size: ");
+                    ui.add(egui::Slider::new(&mut gen_config.cube_size, 0.1..=10f32));
+                });
 
-    writer.send_batch(events.try_iter());
+                ui.label(RichText::new("Chunk size").font(FontId::proportional(20f32)));
+                ui.horizontal(|ui| {
+                    let mut chunk_size = gen_config.chunk_size.to_array();
+                    for (i, l) in chunk_size.iter_mut().zip(["x", "y", "z"]) {
+                        ui.label(format!("{l}: "));
+                        ui.add(DragValue::new(i).clamp_range(1u32..=u32::MAX));
+                    }
+                    gen_config.chunk_size = UVec3::from_array(chunk_size);
+                });
+
+                ui.label(RichText::new("Chunks").font(FontId::proportional(20f32)));
+                ui.horizontal(|ui| {
+                    let mut chunks = gen_config.chunks.to_array();
+                    for (i, l) in chunks.iter_mut().zip(["x", "y", "z"]) {
+                        ui.label(format!("{l}: "));
+                        ui.add(DragValue::new(i).clamp_range(1u32..=u32::MAX));
+                    }
+                    gen_config.chunks = UVec3::from_array(chunks);
+                });
+
+                ui.add_space(10f32);
+                if ui.button("Generate").clicked() {
+                    event.send(GenerateTerrainEvent);
+                }
+            });
+        });
 }
