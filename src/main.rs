@@ -10,7 +10,6 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(MarchingCubesTerrain)
-        .init_resource::<ui::UIState>()
         .add_event::<AppExit>()
         .add_system(bevy::window::close_on_esc)
         .add_system(ui::ui_system)

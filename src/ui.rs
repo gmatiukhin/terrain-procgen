@@ -1,20 +1,30 @@
-use bevy::prelude::{EventWriter, ResMut, Resource, UVec3};
+use bevy::prelude::{EventWriter, Local, ResMut, UVec3};
 use bevy_egui::{
     egui::{DragValue, Grid, Slider, TopBottomPanel, Window},
     EguiContexts,
 };
-use terrain_procgen::generation::{GenerateTerrainEvent, TerrainGeneratorConfig};
+use terrain_procgen::generation::{
+    GenerateNewTerrainEvent, RegenerateTerrainEvent, TerrainGeneratorConfig,
+};
 
-#[derive(Resource, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct UIState {
     is_gen_window_expanded: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct ConfigState {
+    prev_config: TerrainGeneratorConfig,
+    has_already_generated: bool,
 }
 
 pub fn ui_system(
     mut contexts: EguiContexts,
     mut gen_config: ResMut<TerrainGeneratorConfig>,
-    mut ui_state: ResMut<UIState>,
-    mut gen_event_writer: EventWriter<GenerateTerrainEvent>,
+    mut new_terrain_event_writer: EventWriter<GenerateNewTerrainEvent>,
+    mut regenerate_chunks_writer: EventWriter<RegenerateTerrainEvent>,
+    mut ui_state: Local<UIState>,
+    mut prev_config_data: Local<ConfigState>,
 ) {
     TopBottomPanel::top("top_panel")
         .resizable(false)
@@ -33,7 +43,7 @@ pub fn ui_system(
             Grid::new("terrain_generation_settings_grid").show(ui, |ui| {
                 ui.heading("Cube edge length");
                 ui.horizontal(|ui| {
-                    ui.add(Slider::new(&mut gen_config.cube_size, 0.1..=10f32));
+                    ui.add(Slider::new(&mut gen_config.cube_edge_length, 0.1..=10f32));
                 });
                 ui.end_row();
 
@@ -61,8 +71,26 @@ pub fn ui_system(
             });
             ui.add_space(10f32);
             ui.vertical_centered_justified(|ui| {
-                if ui.button("Generate").clicked() {
-                    gen_event_writer.send(GenerateTerrainEvent);
+                let (btn_text, mut send_event): (&str, Box<dyn FnMut()>) =
+                    if prev_config_data.prev_config != *gen_config
+                        || !prev_config_data.has_already_generated
+                    {
+                        (
+                            "Generate",
+                            Box::new(|| {
+                                prev_config_data.prev_config = *gen_config;
+                                prev_config_data.has_already_generated = true;
+                                new_terrain_event_writer.send(GenerateNewTerrainEvent);
+                            }),
+                        )
+                    } else {
+                        (
+                            "Regenerate",
+                            Box::new(|| regenerate_chunks_writer.send(RegenerateTerrainEvent)),
+                        )
+                    };
+                if ui.button(btn_text).clicked() {
+                    send_event();
                 }
             });
         });
