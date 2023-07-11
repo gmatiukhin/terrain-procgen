@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 bevy = "0.10"
 bevy_egui = "0.20"
+env_logger = "0.10.0"
+log = "0.4.19"

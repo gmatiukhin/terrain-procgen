@@ -37,6 +37,17 @@ pub fn ui_system(
                 });
                 ui.end_row();
 
+                ui.heading("Number of chunks");
+                ui.horizontal(|ui| {
+                    let mut chunks = gen_config.chunks_amount.to_array();
+                    for (i, l) in chunks.iter_mut().zip(["x", "y", "z"]) {
+                        ui.label(format!("{l}: "));
+                        ui.add(DragValue::new(i).clamp_range(1u32..=u32::MAX));
+                    }
+                    gen_config.chunks_amount = UVec3::from_array(chunks);
+                });
+                ui.end_row();
+
                 ui.heading("Chunk size");
                 ui.horizontal(|ui| {
                     let mut chunk_size = gen_config.chunk_size.to_array();
@@ -45,17 +56,6 @@ pub fn ui_system(
                         ui.add(DragValue::new(i).clamp_range(1u32..=u32::MAX));
                     }
                     gen_config.chunk_size = UVec3::from_array(chunk_size);
-                });
-                ui.end_row();
-
-                ui.heading("Number of chunks");
-                ui.horizontal(|ui| {
-                    let mut chunks = gen_config.chunks.to_array();
-                    for (i, l) in chunks.iter_mut().zip(["x", "y", "z"]) {
-                        ui.label(format!("{l}: "));
-                        ui.add(DragValue::new(i).clamp_range(1u32..=u32::MAX));
-                    }
-                    gen_config.chunks = UVec3::from_array(chunks);
                 });
                 ui.end_row();
             });
