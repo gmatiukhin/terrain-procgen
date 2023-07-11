@@ -12,7 +12,7 @@ pub struct TerrainGeneratorConfig {
 pub struct GenerateTerrainEvent;
 
 #[derive(Component)]
-pub struct TerrainChunk {
+struct TerrainChunk {
     position: Vec3,
 }
 
@@ -24,5 +24,15 @@ impl Default for TerrainGeneratorConfig {
             chunks: UVec3::ONE,
             show_debug_points: false,
         }
+    }
+}
+
+pub fn generate_terrain(
+    mut gen_event_reader: EventReader<GenerateTerrainEvent>,
+    config: Res<TerrainGeneratorConfig>,
+) {
+    if !gen_event_reader.is_empty() {
+        println!("Generating terrain...");
+        gen_event_reader.clear();
     }
 }
