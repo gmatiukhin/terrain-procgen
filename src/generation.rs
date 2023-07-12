@@ -9,9 +9,9 @@ impl Plugin for MarchingCubesTerrain {
         app.init_resource::<TerrainGeneratorConfig>()
             .add_event::<GenerateNewTerrainEvent>()
             .add_event::<RegenerateTerrainEvent>()
-            .add_system(systems::create_chunks)
-            .add_system(systems::generate_new_chunks)
-            .add_system(systems::regenerate_chunks);
+            .add_systems(Update, systems::create_chunks)
+            .add_systems(Update, systems::generate_new_chunks)
+            .add_systems(Update, systems::regenerate_chunks);
     }
 }
 
@@ -26,10 +26,10 @@ pub struct TerrainGeneratorConfig {
     pub show_debug_points: bool,
 }
 
-#[derive(/*Event,*/ Debug)]
+#[derive(Event, Debug)]
 pub struct GenerateNewTerrainEvent;
 
-#[derive(/*Event,*/ Debug)]
+#[derive(Event, Debug)]
 pub struct RegenerateTerrainEvent;
 
 #[derive(Component, Debug)]

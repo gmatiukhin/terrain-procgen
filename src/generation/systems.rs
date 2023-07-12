@@ -62,7 +62,7 @@ pub(super) fn regenerate_chunks(
     if !regenerate_event.is_empty() {
         for chunk in chunks_query.iter() {
             let (entity, chunk) = chunk;
-            log::info!("Reenerating chunk '{entity:?}' at {}", chunk.position);
+            log::info!("Regenerating chunk '{entity:?}' at {}", chunk.position);
             generate_chunk(chunk);
         }
         regenerate_event.clear();
