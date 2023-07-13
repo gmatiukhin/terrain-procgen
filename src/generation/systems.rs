@@ -1,4 +1,7 @@
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::mesh::{self, PrimitiveTopology},
+};
 use log;
 
 use super::*;
@@ -46,32 +49,37 @@ pub(super) fn create_chunks(
 }
 
 pub(super) fn generate_new_chunks(
-    chunks_query: Query<(Entity, &TerrainChunk), Added<TerrainChunk>>,
+    mut chunks_query: Query<(Entity, &mut TerrainChunk), Added<TerrainChunk>>,
 ) {
-    for chunk in chunks_query.iter() {
-        let (entity, chunk) = chunk;
+    for (entity, mut chunk) in chunks_query.iter_mut() {
         log::info!("Generating new chunk '{entity:?}' at {}", chunk.position);
-        generate_chunk(chunk);
+        generate_chunk(&mut chunk);
     }
 }
 
 pub(super) fn regenerate_chunks(
-    chunks_query: Query<(Entity, &TerrainChunk), With<TerrainChunk>>,
+    mut chunks_query: Query<(Entity, &mut TerrainChunk), With<TerrainChunk>>,
     mut regenerate_event: EventReader<RegenerateTerrainEvent>,
 ) {
     if !regenerate_event.is_empty() {
-        for chunk in chunks_query.iter() {
-            let (entity, chunk) = chunk;
+        for (entity, mut chunk) in chunks_query.iter_mut() {
             log::info!("Regenerating chunk '{entity:?}' at {}", chunk.position);
-            generate_chunk(chunk);
+            generate_chunk(&mut chunk);
         }
         regenerate_event.clear();
     }
 }
 
-fn generate_chunk(chunk: &TerrainChunk) {
+fn generate_chunk(chunk: &mut TerrainChunk) {
     fn ground_function(pos: Vec3) -> bool {
         pos.y > 2f32
     }
-    log::debug!("Generating...");
+
+    for point in chunk.points.iter_mut() {
+        point.value = ground_function(point.position);
+    }
+
+    for cube in chunk.cubes().iter() {
+        log::debug!("{cube:#?}")
+    }
 }
