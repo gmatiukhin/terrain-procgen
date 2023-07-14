@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
-use crate::utils;
-
 mod systems;
+mod tables;
+mod utils;
 
 pub struct MarchingCubesTerrain;
 
@@ -25,7 +25,20 @@ pub struct TerrainGeneratorConfig {
     pub chunks_amount: UVec3,
     pub chunk_size: UVec3,
     pub cube_edge_length: f32,
+    pub isolevel: f32,
     pub show_debug_points: bool,
+}
+
+impl Default for TerrainGeneratorConfig {
+    fn default() -> Self {
+        Self {
+            cube_edge_length: 1f32,
+            chunks_amount: UVec3::ONE,
+            chunk_size: UVec3::ONE,
+            isolevel: 0f32,
+            show_debug_points: false,
+        }
+    }
 }
 
 #[derive(Event, Debug)]
@@ -33,6 +46,15 @@ pub struct GenerateNewTerrainEvent;
 
 #[derive(Event, Debug)]
 pub struct RegenerateTerrainEvent;
+
+#[derive(Debug, Clone, Copy)]
+struct Point {
+    /// Absolute position in the world
+    position: Vec3,
+    // NOTE: bool for now, f32 later
+    /// Is this point empty
+    value: f32,
+}
 
 #[derive(Component, Debug)]
 struct TerrainChunk {
@@ -45,15 +67,6 @@ struct TerrainChunk {
     point_size: UVec3,
     /// 1D array of points
     points: Vec<Point>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Point {
-    /// Absolute position in the world
-    position: Vec3,
-    // NOTE: bool for now, f32 later
-    /// Is this point empty
-    value: bool,
 }
 
 impl TerrainChunk {
@@ -73,7 +86,7 @@ impl TerrainChunk {
                             y as f32 * cube_edge_size,
                             z as f32 * cube_edge_size,
                         ) + position,
-                        value: false,
+                        value: 0f32,
                     });
                 }
             }
@@ -88,54 +101,6 @@ impl TerrainChunk {
                 point_size_z as u32,
             ),
             points,
-        }
-    }
-
-    fn cubes(&self) -> Vec<Cube> {
-        let mut cubes = Vec::with_capacity((self.size.x * self.size.y * self.size.z) as usize);
-        for z in 0..self.size.z {
-            for y in 0..self.size.y {
-                for x in 0..self.size.x {
-                    let cube_zero_corner_idx =
-                        utils::from_3D_to_1D_index((x, y, z).into(), self.size) as usize;
-                    let size_x = self.point_size.x as usize;
-                    let size_y = self.point_size.y as usize;
-                    // let size_z = self.point_size.z as usize;
-                    cubes.push(Cube {
-                        points: [
-                            // Bottom
-                            self.points[cube_zero_corner_idx],
-                            self.points[cube_zero_corner_idx + 1],
-                            self.points[cube_zero_corner_idx + size_x * size_y + 1],
-                            self.points[cube_zero_corner_idx + size_x * size_y],
-                            // Top
-                            self.points[size_x + cube_zero_corner_idx],
-                            self.points[size_x + cube_zero_corner_idx + 1],
-                            self.points[size_x + cube_zero_corner_idx + size_x * size_y + 1],
-                            self.points[size_x + cube_zero_corner_idx + size_x * size_y],
-                        ],
-                    })
-                }
-            }
-        }
-
-        cubes
-    }
-}
-
-/// Cuve with point indexes set as in http://paulbourke.net/geometry/polygonise/
-#[derive(Debug)]
-struct Cube {
-    points: [Point; 8],
-}
-
-impl Default for TerrainGeneratorConfig {
-    fn default() -> Self {
-        Self {
-            cube_edge_length: 1f32,
-            chunks_amount: UVec3::ONE,
-            chunk_size: UVec3::ONE,
-            show_debug_points: false,
         }
     }
 }

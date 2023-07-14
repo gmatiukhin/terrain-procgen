@@ -42,9 +42,7 @@ pub fn ui_system(
         .show(contexts.ctx_mut(), |ui| {
             Grid::new("terrain_generation_settings_grid").show(ui, |ui| {
                 ui.heading("Cube edge length");
-                ui.horizontal(|ui| {
-                    ui.add(Slider::new(&mut gen_config.cube_edge_length, 0.1..=10f32));
-                });
+                ui.add(Slider::new(&mut gen_config.cube_edge_length, 0.1..=10f32));
                 ui.end_row();
 
                 ui.heading("Number of chunks");
@@ -67,6 +65,10 @@ pub fn ui_system(
                     }
                     gen_config.chunk_size = UVec3::from_array(chunk_size);
                 });
+                ui.end_row();
+
+                ui.heading("Isolevel");
+                ui.add(DragValue::new(&mut gen_config.isolevel).speed(0.1));
                 ui.end_row();
             });
             ui.add_space(10f32);

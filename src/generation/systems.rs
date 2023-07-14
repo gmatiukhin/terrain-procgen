@@ -50,36 +50,108 @@ pub(super) fn create_chunks(
 
 pub(super) fn generate_new_chunks(
     mut chunks_query: Query<(Entity, &mut TerrainChunk), Added<TerrainChunk>>,
+    config: Res<TerrainGeneratorConfig>,
 ) {
     for (entity, mut chunk) in chunks_query.iter_mut() {
         log::info!("Generating new chunk '{entity:?}' at {}", chunk.position);
-        generate_chunk(&mut chunk);
+        generate_chunk(&mut chunk, &config);
     }
 }
 
 pub(super) fn regenerate_chunks(
     mut chunks_query: Query<(Entity, &mut TerrainChunk), With<TerrainChunk>>,
     mut regenerate_event: EventReader<RegenerateTerrainEvent>,
+    config: Res<TerrainGeneratorConfig>,
 ) {
     if !regenerate_event.is_empty() {
         for (entity, mut chunk) in chunks_query.iter_mut() {
             log::info!("Regenerating chunk '{entity:?}' at {}", chunk.position);
-            generate_chunk(&mut chunk);
+            generate_chunk(&mut chunk, &config);
         }
         regenerate_event.clear();
     }
 }
 
-fn generate_chunk(chunk: &mut TerrainChunk) {
-    fn ground_function(pos: Vec3) -> bool {
-        pos.y > 2f32
-    }
+fn generate_chunk(chunk: &mut TerrainChunk, config: &Res<TerrainGeneratorConfig>) {
+    let ground_function = |pos: Vec3| -> f32 { config.isolevel - pos.y };
 
     for point in chunk.points.iter_mut() {
         point.value = ground_function(point.position);
     }
 
-    for cube in chunk.cubes().iter() {
-        log::debug!("{cube:#?}")
+    // Go throught all of the points except for the final in each dimension
+    // This way we get only 0th point of every cube in chunk
+    // TODO: show logs
+    for z in 0..chunk.size.z {
+        for y in 0..chunk.size.y {
+            for x in 0..chunk.size.x {
+                let cube_zero_corner_idx =
+                    utils::from_3D_to_1D_index((x, y, z).into(), chunk.size) as usize;
+                let size_x = chunk.point_size.x as usize;
+                let size_y = chunk.point_size.y as usize;
+
+                // Get all points of a cube
+                let cube = [
+                    // Bottom
+                    chunk.points[cube_zero_corner_idx],
+                    chunk.points[cube_zero_corner_idx + 1],
+                    chunk.points[cube_zero_corner_idx + size_x * size_y + 1],
+                    chunk.points[cube_zero_corner_idx + size_x * size_y],
+                    // Top
+                    chunk.points[size_x + cube_zero_corner_idx],
+                    chunk.points[size_x + cube_zero_corner_idx + 1],
+                    chunk.points[size_x + cube_zero_corner_idx + size_x * size_y + 1],
+                    chunk.points[size_x + cube_zero_corner_idx + size_x * size_y],
+                ];
+
+                // Compute cube configuration index by setting bits of the points that are below
+                // the isosurface to 1
+                let mut cube_index = 0;
+                for (i, point) in cube.iter().enumerate() {
+                    if point.value < config.isolevel {
+                        cube_index |= usize::pow(2, i as u32);
+                    }
+                }
+
+                let edge_configuration = tables::EDGE_CONFIGURATION[cube_index];
+                if edge_configuration == 0 {
+                    // This cube is either fully below or fully above the isosurface
+                    // no triangles need to be made
+                    break;
+                }
+
+                // Calculate triangle vertex position for each edge of the cube with at least one
+                // vertex below the isosurface
+                let mut vertlist = [None; 12];
+                for edge in 0..12 {
+                    if edge_configuration & u16::pow(2, edge) != 0 {
+                        let (p1_idx, p2_idx) = tables::EDGE_VERTICES[edge as usize];
+                        vertlist[edge as usize] = Some(utils::vertex_lerp(
+                            config.isolevel,
+                            cube[p1_idx as usize],
+                            cube[p2_idx as usize],
+                        ));
+                    }
+                }
+
+                // Get triangulation order from the table and
+                let trianglulation_order = tables::TRIANGULATION_SEQUENCE[cube_index];
+                let mut i = 0;
+                struct Triangle {
+                    points: [Vec3; 3],
+                }
+                let mut triangles = Vec::new();
+                while trianglulation_order[i] != -1 {
+                    triangles.push(Triangle {
+                        points: [
+                            vertlist[trianglulation_order[i] as usize].unwrap(),
+                            vertlist[trianglulation_order[i + 1] as usize].unwrap(),
+                            vertlist[trianglulation_order[i + 2] as usize].unwrap(),
+                        ],
+                    });
+                    i += 3;
+                }
+            }
+        }
     }
 }
