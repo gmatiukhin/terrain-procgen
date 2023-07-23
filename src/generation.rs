@@ -9,11 +9,14 @@ pub struct MarchingCubesTerrain;
 impl Plugin for MarchingCubesTerrain {
     fn build(&self, app: &mut App) {
         app.init_resource::<TerrainGeneratorConfig>()
+            .insert_resource(Msaa::Sample4)
             .add_event::<GenerateNewTerrainEvent>()
             .add_event::<RegenerateTerrainEvent>()
+            .add_systems(Update, systems::gismos)
             .add_systems(Update, systems::create_chunks)
             .add_systems(Update, systems::generate_new_chunks)
-            .add_systems(Update, systems::regenerate_chunks);
+            .add_systems(Update, systems::regenerate_chunks)
+            .add_systems(Update, systems::despawn_terrain_mesh);
     }
 }
 
@@ -26,17 +29,17 @@ pub struct TerrainGeneratorConfig {
     pub chunk_size: UVec3,
     pub cube_edge_length: f32,
     pub isolevel: f32,
-    pub show_debug_points: bool,
+    pub show_gizmo: bool,
 }
 
 impl Default for TerrainGeneratorConfig {
     fn default() -> Self {
         Self {
             cube_edge_length: 1f32,
-            chunks_amount: UVec3::ONE,
-            chunk_size: UVec3::ONE,
+            chunks_amount: UVec3::new(4, 4, 4),
+            chunk_size: UVec3::new(4, 4, 4),
             isolevel: 0f32,
-            show_debug_points: false,
+            show_gizmo: false,
         }
     }
 }
@@ -51,8 +54,6 @@ pub struct RegenerateTerrainEvent;
 struct Point {
     /// Absolute position in the world
     position: Vec3,
-    // NOTE: bool for now, f32 later
-    /// Is this point empty
     value: f32,
 }
 

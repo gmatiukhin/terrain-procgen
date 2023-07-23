@@ -40,6 +40,9 @@ pub fn ui_system(
         .fixed_size((0f32, 0f32))
         .open(&mut ui_state.is_gen_window_expanded)
         .show(contexts.ctx_mut(), |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Grid dimensions");
+            });
             Grid::new("terrain_generation_settings_grid").show(ui, |ui| {
                 ui.heading("Cube edge length");
                 ui.add(Slider::new(&mut gen_config.cube_edge_length, 0.1..=10f32));
@@ -71,6 +74,9 @@ pub fn ui_system(
                 ui.add(DragValue::new(&mut gen_config.isolevel).speed(0.1));
                 ui.end_row();
             });
+            ui.heading("Debug");
+            ui.checkbox(&mut gen_config.show_gizmo, "Show gizmo");
+
             ui.add_space(10f32);
             ui.vertical_centered_justified(|ui| {
                 let (btn_text, mut send_event): (&str, Box<dyn FnMut()>) =

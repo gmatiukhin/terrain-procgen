@@ -1,10 +1,7 @@
-use bevy::{
-    prelude::*,
-    render::mesh::{self, PrimitiveTopology},
-};
+use bevy::{pbr::wireframe::Wireframe, prelude::*, render::mesh::PrimitiveTopology};
 use log;
 
-use super::*;
+use super::{utils::*, *};
 
 pub(super) fn create_chunks(
     mut commands: Commands,
@@ -48,17 +45,43 @@ pub(super) fn create_chunks(
     }
 }
 
+pub(super) fn despawn_terrain_mesh(
+    mut commands: Commands,
+    generate_event: EventReader<GenerateNewTerrainEvent>,
+    regenerate_event: EventReader<RegenerateTerrainEvent>,
+    meshes: Query<Entity, With<Handle<Mesh>>>,
+) {
+    if !generate_event.is_empty() || !regenerate_event.is_empty() {
+        log::info!("Despawning terrain");
+        for mesh in meshes.iter() {
+            commands.entity(mesh).despawn();
+        }
+    }
+}
+
 pub(super) fn generate_new_chunks(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut chunks_query: Query<(Entity, &mut TerrainChunk), Added<TerrainChunk>>,
     config: Res<TerrainGeneratorConfig>,
 ) {
     for (entity, mut chunk) in chunks_query.iter_mut() {
         log::info!("Generating new chunk '{entity:?}' at {}", chunk.position);
-        generate_chunk(&mut chunk, &config);
+        generate_chunk(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &mut chunk,
+            &config,
+        );
     }
 }
 
 pub(super) fn regenerate_chunks(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut chunks_query: Query<(Entity, &mut TerrainChunk), With<TerrainChunk>>,
     mut regenerate_event: EventReader<RegenerateTerrainEvent>,
     config: Res<TerrainGeneratorConfig>,
@@ -66,14 +89,28 @@ pub(super) fn regenerate_chunks(
     if !regenerate_event.is_empty() {
         for (entity, mut chunk) in chunks_query.iter_mut() {
             log::info!("Regenerating chunk '{entity:?}' at {}", chunk.position);
-            generate_chunk(&mut chunk, &config);
+            generate_chunk(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &mut chunk,
+                &config,
+            );
         }
         regenerate_event.clear();
     }
 }
 
-fn generate_chunk(chunk: &mut TerrainChunk, config: &Res<TerrainGeneratorConfig>) {
-    let ground_function = |pos: Vec3| -> f32 { config.isolevel - pos.y };
+fn generate_chunk(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    chunk: &mut TerrainChunk,
+    config: &Res<TerrainGeneratorConfig>,
+) {
+    let ground_function = |pos: Vec3| -> f32 {
+        (pos.x.powi(2) + pos.y.powi(2) + pos.z.powi(2)) - config.isolevel.powi(2)
+    };
 
     for point in chunk.points.iter_mut() {
         point.value = ground_function(point.position);
@@ -85,23 +122,20 @@ fn generate_chunk(chunk: &mut TerrainChunk, config: &Res<TerrainGeneratorConfig>
     for z in 0..chunk.size.z {
         for y in 0..chunk.size.y {
             for x in 0..chunk.size.x {
-                let cube_zero_corner_idx =
-                    utils::from_3D_to_1D_index((x, y, z).into(), chunk.size) as usize;
-                let size_x = chunk.point_size.x as usize;
-                let size_y = chunk.point_size.y as usize;
-
-                // Get all points of a cube
+                let points = &chunk.points;
+                let point_size = chunk.point_size;
                 let cube = [
                     // Bottom
-                    chunk.points[cube_zero_corner_idx],
-                    chunk.points[cube_zero_corner_idx + 1],
-                    chunk.points[cube_zero_corner_idx + size_x * size_y + 1],
-                    chunk.points[cube_zero_corner_idx + size_x * size_y],
+                    points[from_3D_to_1D_index(UVec3::new(x, y, z), point_size) as usize],
+                    points[from_3D_to_1D_index(UVec3::new(x + 1, y, z), point_size) as usize],
+                    points[from_3D_to_1D_index(UVec3::new(x + 1, y, z + 1), point_size) as usize],
+                    points[from_3D_to_1D_index(UVec3::new(x, y, z + 1), point_size) as usize],
                     // Top
-                    chunk.points[size_x + cube_zero_corner_idx],
-                    chunk.points[size_x + cube_zero_corner_idx + 1],
-                    chunk.points[size_x + cube_zero_corner_idx + size_x * size_y + 1],
-                    chunk.points[size_x + cube_zero_corner_idx + size_x * size_y],
+                    points[from_3D_to_1D_index(UVec3::new(x, y + 1, z), point_size) as usize],
+                    points[from_3D_to_1D_index(UVec3::new(x + 1, y + 1, z), point_size) as usize],
+                    points
+                        [from_3D_to_1D_index(UVec3::new(x + 1, y + 1, z + 1), point_size) as usize],
+                    points[from_3D_to_1D_index(UVec3::new(x, y + 1, z + 1), point_size) as usize],
                 ];
 
                 // Compute cube configuration index by setting bits of the points that are below
@@ -109,47 +143,71 @@ fn generate_chunk(chunk: &mut TerrainChunk, config: &Res<TerrainGeneratorConfig>
                 let mut cube_index = 0;
                 for (i, point) in cube.iter().enumerate() {
                     if point.value < config.isolevel {
-                        cube_index |= usize::pow(2, i as u32);
+                        cube_index |= 1 << i;
                     }
                 }
 
-                let edge_configuration = tables::EDGE_CONFIGURATION[cube_index];
-                if edge_configuration == 0 {
-                    // This cube is either fully below or fully above the isosurface
-                    // no triangles need to be made
-                    break;
-                }
-
-                // Calculate triangle vertex position for each edge of the cube with at least one
-                // vertex below the isosurface
-                let mut vertlist = [None; 12];
-                for edge in 0..12 {
-                    if edge_configuration & u16::pow(2, edge) != 0 {
-                        let (p1_idx, p2_idx) = tables::EDGE_VERTICES[edge as usize];
-                        vertlist[edge as usize] = Some(utils::vertex_lerp(
-                            config.isolevel,
-                            cube[p1_idx as usize],
-                            cube[p2_idx as usize],
-                        ));
+                // Get intersecred edges for the cube configuration,
+                // calculate points along them and add to `vertices`
+                let intersected_edges = tables::INTERSECTED_EDGES[cube_index];
+                let mut vertices = Vec::new();
+                for edge in intersected_edges {
+                    if edge == -1 {
+                        break;
                     }
+                    let (p1_idx, p2_idx) = tables::EDGE_VERTICES[edge as usize];
+                    vertices.push(utils::vertex_lerp(
+                        config.isolevel,
+                        cube[p1_idx as usize],
+                        cube[p2_idx as usize],
+                    ));
                 }
 
-                // Get triangulation order from the table and
-                let trianglulation_order = tables::TRIANGULATION_SEQUENCE[cube_index];
-                let mut i = 0;
-                struct Triangle {
-                    points: [Vec3; 3],
-                }
-                let mut triangles = Vec::new();
-                while trianglulation_order[i] != -1 {
-                    triangles.push(Triangle {
-                        points: [
-                            vertlist[trianglulation_order[i] as usize].unwrap(),
-                            vertlist[trianglulation_order[i + 1] as usize].unwrap(),
-                            vertlist[trianglulation_order[i + 2] as usize].unwrap(),
-                        ],
-                    });
-                    i += 3;
+                // Create mesh
+                let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+
+                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                mesh.compute_flat_normals();
+
+                commands.spawn((
+                    PbrBundle {
+                        mesh: meshes.add(mesh),
+                        material: materials.add(StandardMaterial {
+                            base_color: Color::rgb(0.3, 0.5, 0.3),
+                            double_sided: true,
+                            cull_mode: None,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                    Wireframe,
+                ));
+            }
+        }
+    }
+}
+
+pub(super) fn gismos(mut gizmos: Gizmos, config: Res<TerrainGeneratorConfig>) {
+    if config.show_gizmo {
+        for chx in 0..config.chunks_amount.x {
+            for chy in 0..config.chunks_amount.y {
+                for chz in 0..config.chunks_amount.z {
+                    for x in 0..=config.chunk_size.x {
+                        for y in 0..=config.chunk_size.y {
+                            for z in 0..=config.chunk_size.z {
+                                gizmos.sphere(
+                                    Vec3::new(
+                                        (chx * config.chunk_size.x + x) as f32,
+                                        (chy * config.chunk_size.y + y) as f32,
+                                        (chz * config.chunk_size.z + z) as f32,
+                                    ) * config.cube_edge_length,
+                                    Quat::IDENTITY,
+                                    0.02,
+                                    Color::BLACK,
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
