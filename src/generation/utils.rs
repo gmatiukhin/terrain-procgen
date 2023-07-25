@@ -1,7 +1,7 @@
 use bevy::prelude::{UVec3, Vec3};
 
 #[allow(non_snake_case)]
-pub(super) fn from_1D_to_3D_index(idx: u32, dimensions: UVec3) -> UVec3 {
+pub(super) fn _from_1D_to_3D_index(idx: u32, dimensions: UVec3) -> UVec3 {
     let x = idx % dimensions.x;
     let y = (idx / dimensions.x) % dimensions.y;
     let z = idx / (dimensions.x * dimensions.y);

@@ -6,7 +6,6 @@ mod camera;
 mod ui;
 
 fn main() {
-    env_logger::init();
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)

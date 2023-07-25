@@ -8,15 +8,12 @@ pub struct MarchingCubesTerrain;
 
 impl Plugin for MarchingCubesTerrain {
     fn build(&self, app: &mut App) {
+        use systems::*;
         app.init_resource::<TerrainGeneratorConfig>()
             .insert_resource(Msaa::Sample4)
-            .add_event::<GenerateNewTerrainEvent>()
-            .add_event::<RegenerateTerrainEvent>()
-            .add_systems(Update, systems::gismos)
-            .add_systems(Update, systems::create_chunks)
-            .add_systems(Update, systems::generate_new_chunks)
-            .add_systems(Update, systems::regenerate_chunks)
-            .add_systems(Update, systems::despawn_terrain_mesh);
+            .add_event::<GenerateTerrainEvent>()
+            .add_systems(Update, (create_chunks, generate_chunks))
+            .add_systems(Update, draw_gizmo);
     }
 }
 
@@ -45,10 +42,7 @@ impl Default for TerrainGeneratorConfig {
 }
 
 #[derive(Event, Debug)]
-pub struct GenerateNewTerrainEvent;
-
-#[derive(Event, Debug)]
-pub struct RegenerateTerrainEvent;
+pub struct GenerateTerrainEvent;
 
 #[derive(Debug, Clone, Copy)]
 struct Point {
