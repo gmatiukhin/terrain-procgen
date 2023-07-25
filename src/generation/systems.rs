@@ -1,6 +1,26 @@
-use bevy::{prelude::*, render::mesh::PrimitiveTopology};
+use bevy::{
+    prelude::*,
+    render::mesh::{Indices, PrimitiveTopology},
+};
 
 use super::{tables::*, utils::*, *};
+
+pub(super) fn light(mut commands: Commands) {
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            illuminance: 15000f32,
+            shadows_enabled: true,
+            ..Default::default()
+        },
+        transform: Transform {
+            translation: Vec3::new(100f32, 100f32, 100f32),
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        },
+        visibility: Visibility::Visible,
+        ..Default::default()
+    });
+}
 
 pub(super) fn create_chunks(
     mut commands: Commands,
@@ -62,8 +82,8 @@ pub(super) fn generate_chunks(
 
         // Go throught all of the points except for the final in each dimension
         // This way we get only 0th point of every cube in chunk
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
         let mut vertices = vec![];
+        let mut indices = vec![];
         for z in 0..chunk.size.z {
             for y in 0..chunk.size.y {
                 for x in 0..chunk.size.x {
@@ -100,18 +120,27 @@ pub(super) fn generate_chunks(
                             break;
                         }
                         let (p1_idx, p2_idx) = EDGE_VERTICES[edge as usize];
-                        vertices.push(utils::vertex_lerp(
+                        let vertex = utils::vertex_lerp(
                             config.isolevel,
                             cube[p1_idx as usize],
                             cube[p2_idx as usize],
-                        ));
+                        );
+                        if let Some(idx) = vertices.iter().position(|el| *el == vertex) {
+                            indices.push(idx as u16);
+                        } else {
+                            vertices.push(vertex);
+                            indices.push((vertices.len() - 1) as u16);
+                        }
                     }
                 }
             }
         }
 
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-        mesh.compute_flat_normals();
+        mesh.set_indices(Some(Indices::U16(indices)));
+        // mesh.duplicate_vertices()
+        // mesh.compute_flat_normals();
 
         debug!("Inserting mesh to `{entity:?}`");
         commands.entity(entity).insert(PbrBundle {

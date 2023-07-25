@@ -12,6 +12,7 @@ impl Plugin for MarchingCubesTerrain {
         app.init_resource::<TerrainGeneratorConfig>()
             .insert_resource(Msaa::Sample4)
             .add_event::<GenerateTerrainEvent>()
+            .add_systems(Startup, light)
             .add_systems(Update, (create_chunks, generate_chunks))
             .add_systems(Update, draw_gizmo);
     }
