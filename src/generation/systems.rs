@@ -127,29 +127,31 @@ pub(super) fn generate_chunks(
     }
 }
 
+#[rustfmt::skip]
 pub(super) fn draw_gizmo(mut gizmos: Gizmos, config: Res<TerrainGeneratorConfig>) {
     if config.show_gizmo {
-        for chx in 0..config.chunks_amount.x {
-            for chy in 0..config.chunks_amount.y {
-                for chz in 0..config.chunks_amount.z {
-                    for x in 0..=config.chunk_size.x {
-                        for y in 0..=config.chunk_size.y {
-                            for z in 0..=config.chunk_size.z {
-                                gizmos.sphere(
-                                    Vec3::new(
-                                        (chx * config.chunk_size.x + x) as f32,
-                                        (chy * config.chunk_size.y + y) as f32,
-                                        (chz * config.chunk_size.z + z) as f32,
-                                    ) * config.cube_edge_length,
-                                    Quat::IDENTITY,
-                                    0.02,
-                                    Color::BLACK,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let start = Vec3::new(0f32, 0f32, 0f32);
+        let size_x = (config.chunks_amount.x * config.chunk_size.x) as f32 * config.cube_edge_length;
+        let size_y = (config.chunks_amount.y * config.chunk_size.y) as f32 * config.cube_edge_length;
+        let size_z = (config.chunks_amount.z * config.chunk_size.z) as f32 * config.cube_edge_length;
+
+        gizmos.line(start, Vec3::new(size_x, 0f32, 0f32), Color::RED);
+        gizmos.line(start, Vec3::new(0f32, size_y, 0f32), Color::GREEN);
+        gizmos.line(start, Vec3::new(0f32, 0f32, size_z), Color::BLUE);
+
+        let end = Vec3::new(size_x, size_y, size_z);
+
+        gizmos.line(Vec3::new(0f32, size_y, size_z), end, Color::BLACK);
+        gizmos.line(Vec3::new(size_x, 0f32, size_z), end, Color::BLACK);
+        gizmos.line(Vec3::new(size_x, size_y, 0f32), end, Color::BLACK);
+
+        gizmos.line(Vec3::new(0f32, size_y, size_z), Vec3::new(0f32, size_y, 0f32), Color::BLACK);
+        gizmos.line(Vec3::new(0f32, size_y, size_z), Vec3::new(0f32, 0f32, size_z), Color::BLACK);
+
+        gizmos.line(Vec3::new(size_x, 0f32, size_z), Vec3::new(size_x, 0f32, 0f32), Color::BLACK);
+        gizmos.line(Vec3::new(size_x, 0f32, size_z), Vec3::new(0f32, 0f32, size_z), Color::BLACK);
+
+        gizmos.line(Vec3::new(size_x, size_y, 0f32), Vec3::new(size_x, 0f32, 0f32), Color::BLACK);
+        gizmos.line(Vec3::new(size_x, size_y, 0f32), Vec3::new(0f32, size_y, 0f32), Color::BLACK);
     }
 }
