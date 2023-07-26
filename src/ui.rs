@@ -68,7 +68,7 @@ pub fn ui_system(
                 ui.end_row();
             });
             ui.heading("Debug");
-            ui.checkbox(&mut generation_config.show_gizmo, "Show gizmo");
+            ui.checkbox(&mut generation_config.show_gizmos, "Show gizmo");
 
             ui.add_space(10f32);
             ui.vertical_centered_justified(|ui| {

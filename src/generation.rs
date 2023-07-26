@@ -14,7 +14,7 @@ impl Plugin for MarchingCubesTerrain {
             .add_event::<GenerateTerrainEvent>()
             .add_systems(Startup, light)
             .add_systems(Update, (create_chunks, generate_chunks))
-            .add_systems(Update, draw_gizmo);
+            .add_systems(Update, (draw_bounding_box, draw_mesh_normals));
     }
 }
 
@@ -27,7 +27,7 @@ pub struct TerrainGeneratorConfig {
     pub chunk_size: UVec3,
     pub cube_edge_length: f32,
     pub isolevel: f32,
-    pub show_gizmo: bool,
+    pub show_gizmos: bool,
 }
 
 impl Default for TerrainGeneratorConfig {
@@ -37,7 +37,7 @@ impl Default for TerrainGeneratorConfig {
             chunks_amount: UVec3::new(4, 4, 4),
             chunk_size: UVec3::new(4, 4, 4),
             isolevel: 0f32,
-            show_gizmo: false,
+            show_gizmos: false,
         }
     }
 }

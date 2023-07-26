@@ -137,10 +137,34 @@ pub(super) fn generate_chunks(
         }
 
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+        let mut normals = vec![Vec3::ZERO; vertices.len()];
+
+        for chunk in indices.chunks_exact(3) {
+            let idx_a = chunk[0] as usize;
+            let idx_b = chunk[1] as usize;
+            let idx_c = chunk[2] as usize;
+
+            let vertex_a = vertices[idx_a];
+            let vertex_b = vertices[idx_b];
+            let vertex_c = vertices[idx_c];
+
+            let edge_ab = vertex_b - vertex_a;
+            let edge_ac = vertex_c - vertex_a;
+
+            let wheighted_normal = edge_ab.cross(edge_ac);
+
+            normals[idx_a] += wheighted_normal;
+            normals[idx_b] += wheighted_normal;
+            normals[idx_c] += wheighted_normal;
+        }
+
+        for n in normals.iter_mut() {
+            *n = n.normalize();
+        }
+
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         mesh.set_indices(Some(Indices::U16(indices)));
-        // mesh.duplicate_vertices()
-        // mesh.compute_flat_normals();
 
         debug!("Inserting mesh to `{entity:?}`");
         commands.entity(entity).insert(PbrBundle {
@@ -148,7 +172,10 @@ pub(super) fn generate_chunks(
             material: materials.add(StandardMaterial {
                 base_color: Color::rgb(0.3, 0.5, 0.3),
                 double_sided: true,
-                cull_mode: None,
+                // cull_mode: None,
+                perceptual_roughness: 1f32,
+                metallic: 0f32,
+                reflectance: 0f32,
                 ..Default::default()
             }),
             ..Default::default()
@@ -157,30 +184,64 @@ pub(super) fn generate_chunks(
 }
 
 #[rustfmt::skip]
-pub(super) fn draw_gizmo(mut gizmos: Gizmos, config: Res<TerrainGeneratorConfig>) {
-    if config.show_gizmo {
-        let start = Vec3::new(0f32, 0f32, 0f32);
-        let size_x = (config.chunks_amount.x * config.chunk_size.x) as f32 * config.cube_edge_length;
-        let size_y = (config.chunks_amount.y * config.chunk_size.y) as f32 * config.cube_edge_length;
-        let size_z = (config.chunks_amount.z * config.chunk_size.z) as f32 * config.cube_edge_length;
+pub(super) fn draw_bounding_box(mut gizmos: Gizmos, config: Res<TerrainGeneratorConfig>) {
+    if !config.show_gizmos {
+        return;
+    }
 
-        gizmos.line(start, Vec3::new(size_x, 0f32, 0f32), Color::RED);
-        gizmos.line(start, Vec3::new(0f32, size_y, 0f32), Color::GREEN);
-        gizmos.line(start, Vec3::new(0f32, 0f32, size_z), Color::BLUE);
+    let start = Vec3::new(0f32, 0f32, 0f32);
+    let size_x = (config.chunks_amount.x * config.chunk_size.x) as f32 * config.cube_edge_length;
+    let size_y = (config.chunks_amount.y * config.chunk_size.y) as f32 * config.cube_edge_length;
+    let size_z = (config.chunks_amount.z * config.chunk_size.z) as f32 * config.cube_edge_length;
 
-        let end = Vec3::new(size_x, size_y, size_z);
+    gizmos.line(start, Vec3::new(size_x, 0f32, 0f32), Color::RED);
+    gizmos.line(start, Vec3::new(0f32, size_y, 0f32), Color::GREEN);
+    gizmos.line(start, Vec3::new(0f32, 0f32, size_z), Color::BLUE);
 
-        gizmos.line(Vec3::new(0f32, size_y, size_z), end, Color::BLACK);
-        gizmos.line(Vec3::new(size_x, 0f32, size_z), end, Color::BLACK);
-        gizmos.line(Vec3::new(size_x, size_y, 0f32), end, Color::BLACK);
+    let end = Vec3::new(size_x, size_y, size_z);
 
-        gizmos.line(Vec3::new(0f32, size_y, size_z), Vec3::new(0f32, size_y, 0f32), Color::BLACK);
-        gizmos.line(Vec3::new(0f32, size_y, size_z), Vec3::new(0f32, 0f32, size_z), Color::BLACK);
+    gizmos.line(Vec3::new(0f32, size_y, size_z), end, Color::BLACK);
+    gizmos.line(Vec3::new(size_x, 0f32, size_z), end, Color::BLACK);
+    gizmos.line(Vec3::new(size_x, size_y, 0f32), end, Color::BLACK);
 
-        gizmos.line(Vec3::new(size_x, 0f32, size_z), Vec3::new(size_x, 0f32, 0f32), Color::BLACK);
-        gizmos.line(Vec3::new(size_x, 0f32, size_z), Vec3::new(0f32, 0f32, size_z), Color::BLACK);
+    gizmos.line(Vec3::new(0f32, size_y, size_z), Vec3::new(0f32, size_y, 0f32), Color::BLACK);
+    gizmos.line(Vec3::new(0f32, size_y, size_z), Vec3::new(0f32, 0f32, size_z), Color::BLACK);
 
-        gizmos.line(Vec3::new(size_x, size_y, 0f32), Vec3::new(size_x, 0f32, 0f32), Color::BLACK);
-        gizmos.line(Vec3::new(size_x, size_y, 0f32), Vec3::new(0f32, size_y, 0f32), Color::BLACK);
+    gizmos.line(Vec3::new(size_x, 0f32, size_z), Vec3::new(size_x, 0f32, 0f32), Color::BLACK);
+    gizmos.line(Vec3::new(size_x, 0f32, size_z), Vec3::new(0f32, 0f32, size_z), Color::BLACK);
+
+    gizmos.line(Vec3::new(size_x, size_y, 0f32), Vec3::new(size_x, 0f32, 0f32), Color::BLACK);
+    gizmos.line(Vec3::new(size_x, size_y, 0f32), Vec3::new(0f32, size_y, 0f32), Color::BLACK);
+}
+
+pub(super) fn draw_mesh_normals(
+    mut gizmos: Gizmos,
+    config: Res<TerrainGeneratorConfig>,
+    meshe_handles: Query<&Handle<Mesh>, With<TerrainChunk>>,
+    meshes: ResMut<Assets<Mesh>>,
+) {
+    if !config.show_gizmos {
+        return;
+    }
+
+    for handle in meshe_handles.iter() {
+        if let Some(mesh) = meshes.get(handle) {
+            let vertices = mesh
+                .attribute(Mesh::ATTRIBUTE_POSITION)
+                .unwrap()
+                .as_float3()
+                .unwrap();
+            let normals = mesh
+                .attribute(Mesh::ATTRIBUTE_NORMAL)
+                .unwrap()
+                .as_float3()
+                .unwrap();
+
+            for (v, n) in vertices.iter().zip(normals) {
+                let v = Vec3::from_slice(v);
+                let n = Vec3::from_slice(n);
+                gizmos.line(v, v + n, Color::ORANGE);
+            }
+        }
     }
 }
