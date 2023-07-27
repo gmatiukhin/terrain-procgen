@@ -13,7 +13,24 @@ impl Plugin for MarchingCubesTerrain {
             .insert_resource(Msaa::Sample4)
             .add_event::<GenerateTerrainEvent>()
             .add_systems(Startup, light)
-            .add_systems(Update, (create_chunks, generate_chunks))
+            .add_systems(
+                Update,
+                (
+                    create_chunks.run_if(on_event::<GenerateTerrainEvent>()),
+                    appply_ground_function
+                        .run_if(IntoSystem::into_system(
+                            |new_chunks: Query<Entity, Added<TerrainChunk>>| !new_chunks.is_empty(),
+                        ))
+                        .after(create_chunks),
+                    generate_chunks
+                        .run_if(IntoSystem::into_system(
+                            |changed_chunks: Query<Entity, Changed<TerrainChunk>>| {
+                                !changed_chunks.is_empty()
+                            },
+                        ))
+                        .after(appply_ground_function),
+                ),
+            )
             .add_systems(Update, (draw_bounding_box, draw_mesh_normals));
     }
 }

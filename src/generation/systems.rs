@@ -24,41 +24,53 @@ pub(super) fn light(mut commands: Commands) {
 
 pub(super) fn create_chunks(
     mut commands: Commands,
-    mut generate_terrain_reader: EventReader<GenerateTerrainEvent>,
-    existing_chunks_query: Query<Option<Entity>, With<TerrainChunk>>,
+    existing_chunks: Query<Option<Entity>, With<TerrainChunk>>,
     config: Res<TerrainGeneratorConfig>,
 ) {
-    // We only care that there is an event
-    if !generate_terrain_reader.is_empty() {
-        info!("Despawning chunks");
-        for existing_chunk_entity in existing_chunks_query.iter().flatten() {
-            debug!("Despawning chunk '{existing_chunk_entity:?}'");
-            commands.entity(existing_chunk_entity).despawn();
-        }
+    info!("Despawning chunks");
+    for existing_chunk_entity in existing_chunks.iter().flatten() {
+        debug!("Despawning chunk '{existing_chunk_entity:?}'");
+        commands.entity(existing_chunk_entity).despawn();
+    }
 
-        info!("Generating chunks with config:\n{config:#?}");
-        let chunks_amount = config.chunks_amount;
-        let chunk_size = config.chunk_size;
-        let cube_size = config.cube_edge_length;
-        let mut chunks = vec![];
-        for z in 0..chunks_amount.z {
-            for y in 0..chunks_amount.y {
-                for x in 0..chunks_amount.x {
-                    let chunk = TerrainChunk::new(
-                        Vec3 {
-                            x: (x * chunk_size.x) as f32 * cube_size,
-                            y: (y * chunk_size.y) as f32 * cube_size,
-                            z: (z * chunk_size.z) as f32 * cube_size,
-                        },
-                        config.chunk_size,
-                        config.cube_edge_length,
-                    );
-                    chunks.push(chunk);
-                }
+    info!("Generating chunks with config:\n{config:#?}");
+    let chunks_amount = config.chunks_amount;
+    let chunk_size = config.chunk_size;
+    let cube_size = config.cube_edge_length;
+    let mut chunks = vec![];
+    for z in 0..chunks_amount.z {
+        for y in 0..chunks_amount.y {
+            for x in 0..chunks_amount.x {
+                let chunk = TerrainChunk::new(
+                    Vec3 {
+                        x: (x * chunk_size.x) as f32 * cube_size,
+                        y: (y * chunk_size.y) as f32 * cube_size,
+                        z: (z * chunk_size.z) as f32 * cube_size,
+                    },
+                    config.chunk_size,
+                    config.cube_edge_length,
+                );
+                chunks.push(chunk);
             }
         }
-        commands.spawn_batch(chunks);
-        generate_terrain_reader.clear();
+    }
+    commands.spawn_batch(chunks);
+}
+
+pub(super) fn appply_ground_function(
+    mut new_chunks: Query<(Entity, &mut TerrainChunk), Added<TerrainChunk>>,
+) {
+    info!("Applying ground function");
+    for (entity, mut chunk) in new_chunks.iter_mut() {
+        debug!(
+            "Applying ground function to chunk '{entity:?}' at {}",
+            chunk.position
+        );
+        let ground_function = |pos: Vec3| -> f32 { pos.y };
+
+        for point in chunk.points.iter_mut() {
+            point.value = ground_function(point.position);
+        }
     }
 }
 
@@ -66,19 +78,15 @@ pub(super) fn generate_chunks(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut chunks_query: Query<(Entity, &mut TerrainChunk), Added<TerrainChunk>>,
+    changed_chunks: Query<(Entity, &TerrainChunk), Changed<TerrainChunk>>,
     config: Res<TerrainGeneratorConfig>,
 ) {
-    for (entity, mut chunk) in chunks_query.iter_mut() {
-        debug!("Generating new chunk '{entity:?}' at {}", chunk.position);
-
-        let ground_function = |pos: Vec3| -> f32 {
-            (pos.x.powi(2) + pos.y.powi(2) + pos.z.powi(2)) - config.isolevel.powi(2)
-        };
-
-        for point in chunk.points.iter_mut() {
-            point.value = ground_function(point.position);
-        }
+    info!("Generating meshes");
+    for (entity, chunk) in changed_chunks.iter() {
+        debug!(
+            "Generating mesh for chunk '{entity:?}' at {}",
+            chunk.position
+        );
 
         // Go throught all of the points except for the final in each dimension
         // This way we get only 0th point of every cube in chunk
@@ -136,9 +144,8 @@ pub(super) fn generate_chunks(
             }
         }
 
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+        // Compute normals
         let mut normals = vec![Vec3::ZERO; vertices.len()];
-
         for chunk in indices.chunks_exact(3) {
             let idx_a = chunk[0] as usize;
             let idx_b = chunk[1] as usize;
@@ -162,11 +169,12 @@ pub(super) fn generate_chunks(
             *n = n.normalize();
         }
 
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         mesh.set_indices(Some(Indices::U16(indices)));
 
-        debug!("Inserting mesh to `{entity:?}`");
+        debug!("Inserting mesh into `{entity:?}`");
         commands.entity(entity).insert(PbrBundle {
             mesh: meshes.add(mesh),
             material: materials.add(StandardMaterial {
